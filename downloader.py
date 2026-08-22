@@ -19,7 +19,10 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 # ترتیب کلاینت‌هایی که یوتیوب رو امتحان می‌کنیم؛ هرکدوم شکست خورد، بعدی رو امتحان می‌کنیم.
-YOUTUBE_CLIENT_CHAIN = ["android", "ios", "tv_embedded", "web"]
+# None یعنی به‌جای اجبار یک کلاینت خاص، به خود yt-dlp اجازه بدیم به‌صورت خودکار
+# (معمولاً ترکیبی از چند کلاینت) فرمت‌ها رو انتخاب کنه - این آخرین راه‌حله، برای
+# ویدیوهایی که یوتیوب هیچ‌کدوم از کلاینت‌های تکی بالا رو براشون فرمت نمی‌ده.
+YOUTUBE_CLIENT_CHAIN = ["android", "ios", "tv_embedded", "web", None]
 
 # زنجیره‌ی فرمت ویدیو: بدون فیلتر سخت‌گیرانه‌ی پسوند - ffmpeg خودش موقع merge به mp4 تبدیل می‌کنه.
 # فیلتر کردن روی ext=mp4/m4a باعث می‌شد بعضی کلاینت‌ها (خصوصاً اندروید) هیچ فرمتی پیدا نکنن.
@@ -178,11 +181,15 @@ class Downloader:
             )
 
         last_error: Exception | None = None
+        saw_sign_in_required = False
 
         for client in YOUTUBE_CLIENT_CHAIN:
             opts = self._base_opts(out_dir)
             opts["noplaylist"] = True
-            opts["extractor_args"] = {"youtube": {"player_client": [client]}}
+            if client:
+                opts["extractor_args"] = {"youtube": {"player_client": [client]}}
+            # اگه client مقدار None باشه، هیچ extractor_args ست نمی‌شه و yt-dlp
+            # با منطق پیش‌فرض خودش (معمولاً ترکیبی از چند کلاینت) عمل می‌کنه.
 
             if mode == "audio":
                 opts["format"] = "ba/b"
@@ -233,6 +240,7 @@ class Downloader:
                 last_error = e
 
                 if "Sign in to confirm" in msg or "not a bot" in msg:
+                    saw_sign_in_required = True
                     logger.warning(f"[youtube:{client}] بلاک شد (نیاز به کوکی): {msg[:200]}")
                     continue
 
@@ -256,7 +264,7 @@ class Downloader:
                 continue
 
         final_msg = str(last_error) if last_error else "دلیل نامشخص"
-        if "Sign in to confirm" in final_msg or "not a bot" in final_msg:
+        if saw_sign_in_required or "Sign in to confirm" in final_msg or "not a bot" in final_msg:
             raise BotCheckError(final_msg)
         raise DownloaderError(final_msg)
 
