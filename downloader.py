@@ -112,7 +112,7 @@ class Downloader:
 
     # -- تنظیمات مشترک -------------------------------------------------
 
-    def _base_opts(self, out_dir: str) -> dict:
+    def _base_opts(self, out_dir: str, use_cookies: bool = True) -> dict:
         out_template = os.path.join(out_dir, "%(id)s_%(autonumber)s.%(ext)s")
 
         opts: dict = {
@@ -128,7 +128,7 @@ class Downloader:
             "http_headers": {"User-Agent": USER_AGENT},
         }
 
-        if self._cookies_path:
+        if use_cookies and self._cookies_path:
             opts["cookiefile"] = self._cookies_path
 
         return opts
@@ -186,89 +186,97 @@ class Downloader:
         saw_sign_in_required = False
         attempt_summaries: list[str] = []
 
-        for client in YOUTUBE_CLIENT_CHAIN:
-            opts = self._base_opts(out_dir)
-            opts["noplaylist"] = True
-            if client:
-                opts["extractor_args"] = {"youtube": {"player_client": [client]}}
-            # اگه client مقدار None باشه، هیچ extractor_args ست نمی‌شه و yt-dlp
-            # با منطق پیش‌فرض خودش (معمولاً ترکیبی از چند کلاینت) عمل می‌کنه.
+        # پاس اول بدون کوکی (یه باگ شناخته‌شده‌ی تازه‌ی yt-dlp هست که پاس‌دادن کوکی
+        # به ویدیوهای عمومی گاهی باعث خطای "The page needs to be reloaded" می‌شه)،
+        # پاس دوم با کوکی - فقط اگه کوکی تنظیم شده باشه و پاس اول شکست بخوره.
+        cookie_passes = [False, True] if self._cookies_path else [False]
 
-            if mode == "audio":
-                opts["format"] = "ba/b"
-                opts["postprocessors"] = [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": AUDIO_CODEC,
-                    "preferredquality": AUDIO_QUALITY_KBPS,
-                }]
-            else:
-                if quality == "best" or quality not in QUALITY_HEIGHTS:
-                    opts["format"] = VIDEO_FORMAT_SELECTOR
+        for use_cookies in cookie_passes:
+            for client in YOUTUBE_CLIENT_CHAIN:
+                opts = self._base_opts(out_dir, use_cookies=use_cookies)
+                opts["noplaylist"] = True
+                if client:
+                    opts["extractor_args"] = {"youtube": {"player_client": [client]}}
+                # اگه client مقدار None باشه، هیچ extractor_args ست نمی‌شه و yt-dlp
+                # با منطق پیش‌فرض خودش (معمولاً ترکیبی از چند کلاینت) عمل می‌کنه.
+
+                if mode == "audio":
+                    opts["format"] = "ba/b"
+                    opts["postprocessors"] = [{
+                        "key": "FFmpegExtractAudio",
+                        "preferredcodec": AUDIO_CODEC,
+                        "preferredquality": AUDIO_QUALITY_KBPS,
+                    }]
                 else:
-                    h = QUALITY_HEIGHTS[quality]
-                    opts["format"] = (
-                        f"bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/best"
-                    )
-                opts["merge_output_format"] = "mp4"
-
-            try:
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    # یک تک‌فراخوانی extract_info با download=True: هم استخراج و هم
-                    # دانلود واقعی رو انجام می‌ده. فراخوانی جدای process_ie_result
-                    # بعد از این باعث خطای کاذب "Requested format is not available" می‌شد.
-                    info = ydl.extract_info(url, download=True)
-                    filepath = ydl.prepare_filename(info)
-                    expected_ext = f".{AUDIO_CODEC}" if mode == "audio" else ".mp4"
-
-                    if not os.path.exists(filepath):
-                        base, _ = os.path.splitext(filepath)
-                        candidate = base + expected_ext
-                        filepath = candidate if os.path.exists(candidate) else self._find_entry_file(
-                            out_dir, "", set()
+                    if quality == "best" or quality not in QUALITY_HEIGHTS:
+                        opts["format"] = VIDEO_FORMAT_SELECTOR
+                    else:
+                        h = QUALITY_HEIGHTS[quality]
+                        opts["format"] = (
+                            f"bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/best"
                         )
+                    opts["merge_output_format"] = "mp4"
 
-                    if not filepath or not os.path.exists(filepath):
-                        raise UnavailableError("فایل خروجی بعد از دانلود پیدا نشد.")
+                tag = f"{client or 'auto'}{'+cookies' if use_cookies else ''}"
 
-                    return {
-                        "title": info.get("title") or "video",
-                        "items": [{"path": filepath, "type": "audio" if mode == "audio" else "video"}],
-                    }
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        # یک تک‌فراخوانی extract_info با download=True: هم استخراج و هم
+                        # دانلود واقعی رو انجام می‌ده. فراخوانی جدای process_ie_result
+                        # بعد از این باعث خطای کاذب "Requested format is not available" می‌شد.
+                        info = ydl.extract_info(url, download=True)
+                        filepath = ydl.prepare_filename(info)
+                        expected_ext = f".{AUDIO_CODEC}" if mode == "audio" else ".mp4"
 
-            except FileTooLargeError:
-                raise
+                        if not os.path.exists(filepath):
+                            base, _ = os.path.splitext(filepath)
+                            candidate = base + expected_ext
+                            filepath = candidate if os.path.exists(candidate) else self._find_entry_file(
+                                out_dir, "", set()
+                            )
 
-            except yt_dlp.utils.DownloadError as e:
-                msg = str(e)
-                last_error = e
+                        if not filepath or not os.path.exists(filepath):
+                            raise UnavailableError("فایل خروجی بعد از دانلود پیدا نشد.")
 
-                if "Sign in to confirm" in msg or "not a bot" in msg:
-                    saw_sign_in_required = True
-                    attempt_summaries.append(f"{client or 'auto'}: نیاز به ورود/کوکی")
-                    logger.warning(f"[youtube:{client}] بلاک شد (نیاز به کوکی): {msg[:200]}")
+                        return {
+                            "title": info.get("title") or "video",
+                            "items": [{"path": filepath, "type": "audio" if mode == "audio" else "video"}],
+                        }
+
+                except FileTooLargeError:
+                    raise
+
+                except yt_dlp.utils.DownloadError as e:
+                    msg = str(e)
+                    last_error = e
+
+                    if "Sign in to confirm" in msg or "not a bot" in msg:
+                        saw_sign_in_required = True
+                        attempt_summaries.append(f"{tag}: نیاز به ورود/کوکی")
+                        logger.warning(f"[youtube:{tag}] بلاک شد (نیاز به کوکی): {msg[:200]}")
+                        continue
+
+                    if any(k in msg for k in ["Private video", "This video is unavailable",
+                                               "has been removed", "not available in your country",
+                                               "content isn't available", "age-restricted"]):
+                        raise UnavailableError(msg) from e
+
+                    if "Requested format is not available" in msg and mode == "video" and quality != "best":
+                        # کیفیت درخواستی موجود نیست؛ به‌جای شکست کامل، بهترین کیفیت موجود رو می‌گیریم
+                        attempt_summaries.append(f"{tag}: کیفیت {quality} موجود نبود")
+                        logger.warning(f"[youtube:{tag}] کیفیت {quality} موجود نبود، best امتحان می‌شه.")
+                        quality = "best"
+                        continue
+
+                    attempt_summaries.append(f"{tag}: {msg[:150]}")
+                    logger.warning(f"[youtube:{tag}] شکست خورد، کلاینت بعدی: {msg[:200]}")
                     continue
 
-                if any(k in msg for k in ["Private video", "This video is unavailable",
-                                           "has been removed", "not available in your country",
-                                           "content isn't available", "age-restricted"]):
-                    raise UnavailableError(msg) from e
-
-                if "Requested format is not available" in msg and mode == "video" and quality != "best":
-                    # کیفیت درخواستی موجود نیست؛ به‌جای شکست کامل، بهترین کیفیت موجود رو می‌گیریم
-                    attempt_summaries.append(f"{client or 'auto'}: کیفیت {quality} موجود نبود")
-                    logger.warning(f"[youtube:{client}] کیفیت {quality} موجود نبود، best امتحان می‌شه.")
-                    quality = "best"
+                except Exception as e:
+                    last_error = e
+                    attempt_summaries.append(f"{tag}: {str(e)[:150]}")
+                    logger.warning(f"[youtube:{tag}] خطای غیرمنتظره: {e}")
                     continue
-
-                attempt_summaries.append(f"{client or 'auto'}: {msg[:150]}")
-                logger.warning(f"[youtube:{client}] شکست خورد، کلاینت بعدی: {msg[:200]}")
-                continue
-
-            except Exception as e:
-                last_error = e
-                attempt_summaries.append(f"{client or 'auto'}: {str(e)[:150]}")
-                logger.warning(f"[youtube:{client}] خطای غیرمنتظره: {e}")
-                continue
 
         final_msg = str(last_error) if last_error else "دلیل نامشخص"
         if saw_sign_in_required or "Sign in to confirm" in final_msg or "not a bot" in final_msg:
