@@ -445,7 +445,7 @@ async def _process_download(
     except DownloaderError as e:
         error_text = str(e)
         await status_msg.edit_text(
-            f"❌ دانلود ناموفق بود.\n\nجزئیات خطا:\n`{error_text[:500]}`",
+            f"❌ دانلود ناموفق بود.\n\nجزئیات خطا (هر کلاینت):\n`{error_text[:900]}`",
             parse_mode="Markdown",
         )
 

@@ -184,6 +184,7 @@ class Downloader:
 
         last_error: Exception | None = None
         saw_sign_in_required = False
+        attempt_summaries: list[str] = []
 
         for client in YOUTUBE_CLIENT_CHAIN:
             opts = self._base_opts(out_dir)
@@ -243,6 +244,7 @@ class Downloader:
 
                 if "Sign in to confirm" in msg or "not a bot" in msg:
                     saw_sign_in_required = True
+                    attempt_summaries.append(f"{client or 'auto'}: نیاز به ورود/کوکی")
                     logger.warning(f"[youtube:{client}] بلاک شد (نیاز به کوکی): {msg[:200]}")
                     continue
 
@@ -253,22 +255,27 @@ class Downloader:
 
                 if "Requested format is not available" in msg and mode == "video" and quality != "best":
                     # کیفیت درخواستی موجود نیست؛ به‌جای شکست کامل، بهترین کیفیت موجود رو می‌گیریم
+                    attempt_summaries.append(f"{client or 'auto'}: کیفیت {quality} موجود نبود")
                     logger.warning(f"[youtube:{client}] کیفیت {quality} موجود نبود، best امتحان می‌شه.")
                     quality = "best"
                     continue
 
+                attempt_summaries.append(f"{client or 'auto'}: {msg[:150]}")
                 logger.warning(f"[youtube:{client}] شکست خورد، کلاینت بعدی: {msg[:200]}")
                 continue
 
             except Exception as e:
                 last_error = e
+                attempt_summaries.append(f"{client or 'auto'}: {str(e)[:150]}")
                 logger.warning(f"[youtube:{client}] خطای غیرمنتظره: {e}")
                 continue
 
         final_msg = str(last_error) if last_error else "دلیل نامشخص"
         if saw_sign_in_required or "Sign in to confirm" in final_msg or "not a bot" in final_msg:
             raise BotCheckError(final_msg)
-        raise DownloaderError(final_msg)
+
+        detail = " | ".join(attempt_summaries) if attempt_summaries else final_msg
+        raise DownloaderError(detail)
 
     # -- مسیر اینستاگرام ---------------------------------------------
 
