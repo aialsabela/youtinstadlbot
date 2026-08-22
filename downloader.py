@@ -19,10 +19,13 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 # ترتیب کلاینت‌هایی که یوتیوب رو امتحان می‌کنیم؛ هرکدوم شکست خورد، بعدی رو امتحان می‌کنیم.
-# None یعنی به‌جای اجبار یک کلاینت خاص، به خود yt-dlp اجازه بدیم به‌صورت خودکار
-# (معمولاً ترکیبی از چند کلاینت) فرمت‌ها رو انتخاب کنه - این آخرین راه‌حله، برای
-# ویدیوهایی که یوتیوب هیچ‌کدوم از کلاینت‌های تکی بالا رو براشون فرمت نمی‌ده.
-YOUTUBE_CLIENT_CHAIN = ["android", "ios", "tv_embedded", "web", None]
+# None یعنی هیچ کلاینت خاصی اجبار نمی‌شه و خود yt-dlp با منطق پیش‌فرضش (که معمولاً
+# ترکیبی از چند کلاینته و بهتر نگه‌داری می‌شه) فرمت‌ها رو انتخاب می‌کنه - این حالت
+# اول امتحان می‌شه چون قابل‌اعتمادترینه. اجبار به یک کلاینت تکی (مخصوصاً android)
+# این روزها زیاد باعث خطای "فرمت موجود نیست" می‌شه، چون یوتیوب برای اون کلاینت‌ها
+# محدودیت‌های تازه (نیاز به PO token) گذاشته؛ برای همین فقط به‌عنوان fallback
+# برای حالت‌های بلاک‌شده (خطای "Sign in to confirm") نگه داشته شدن.
+YOUTUBE_CLIENT_CHAIN = [None, "tv_embedded", "web", "android", "ios"]
 
 # زنجیره‌ی فرمت ویدیو: بدون فیلتر سخت‌گیرانه‌ی پسوند - ffmpeg خودش موقع merge به mp4 تبدیل می‌کنه.
 # فیلتر کردن روی ext=mp4/m4a باعث می‌شد بعضی کلاینت‌ها (خصوصاً اندروید) هیچ فرمتی پیدا نکنن.
@@ -160,7 +163,6 @@ class Downloader:
         opts = self._base_opts(out_dir)
         opts["noplaylist"] = True
         opts["skip_download"] = True
-        opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
