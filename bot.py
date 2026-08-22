@@ -53,6 +53,8 @@ def download_media(url: str, out_dir: str) -> dict:
     """با yt-dlp لینک رو دانلود می‌کنه و مسیر فایل رو برمی‌گردونه."""
     out_template = os.path.join(out_dir, "%(title).80s.%(ext)s")
 
+    cookies_file = os.environ.get("COOKIES_FILE")  # مسیر فایل کوکی، اگه ست شده باشه
+
     ydl_opts = {
         "outtmpl": out_template,
         "format": "best[ext=mp4]/best",
@@ -61,7 +63,22 @@ def download_media(url: str, out_dir: str) -> dict:
         "no_warnings": True,
         "restrictfilenames": True,
         "max_filesize": MAX_FILE_SIZE_MB * 1024 * 1024,
+        "nocheckcertificate": True,
+        "retries": 5,
+        "fragment_retries": 5,
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            )
+        },
+        # از کلاینت اندروید یوتیوب استفاده می‌کنه که کمتر بلاک می‌شه
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
     }
+
+    if cookies_file and os.path.exists(cookies_file):
+        ydl_opts["cookiefile"] = cookies_file
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
@@ -133,8 +150,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except yt_dlp.utils.DownloadError as e:
         logger.warning(f"Download error: {e}")
+        error_text = str(e)
+        # کوتاه‌شده‌ی پیام خطای واقعی رو نشون می‌دیم تا بشه دلیل رو فهمید
         await status_msg.edit_text(
-            "❌ دانلود ناموفق بود. ممکنه لینک خصوصی، حذف‌شده یا محدود به کشور خاصی باشه."
+            "❌ دانلود ناموفق بود.\n\n"
+            f"جزئیات خطا:\n`{error_text[:500]}`",
+            parse_mode="Markdown",
         )
     except Exception as e:
         logger.exception("Unexpected error")
