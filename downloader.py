@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 # ترتیب کلاینت‌هایی که یوتیوب رو امتحان می‌کنیم؛ هرکدوم شکست خورد، بعدی رو امتحان می‌کنیم.
 YOUTUBE_CLIENT_CHAIN = ["android", "ios", "tv_embedded", "web"]
 
-# زنجیره‌ی فرمت ویدیو: اول ویدیو+صدای جدا با کیفیت خوب، اگه نبود بهترین فرمت ترکیبی موجود
-VIDEO_FORMAT_SELECTOR = "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/best"
+# زنجیره‌ی فرمت ویدیو: بدون فیلتر سخت‌گیرانه‌ی پسوند - ffmpeg خودش موقع merge به mp4 تبدیل می‌کنه.
+# فیلتر کردن روی ext=mp4/m4a باعث می‌شد بعضی کلاینت‌ها (خصوصاً اندروید) هیچ فرمتی پیدا نکنن.
+VIDEO_FORMAT_SELECTOR = "bv*+ba/best"
 
 # فرمت‌سلکتور برای کیفیت‌های مشخص (ارتفاع تصویر به پیکسل)
 QUALITY_HEIGHTS = {"1080": 1080, "720": 720, "480": 480, "360": 360}
@@ -172,8 +173,7 @@ class Downloader:
                 else:
                     h = QUALITY_HEIGHTS[quality]
                     opts["format"] = (
-                        f"bv*[height<={h}][ext=mp4]+ba[ext=m4a]/"
-                        f"bv*[height<={h}]+ba/b[height<={h}]/best"
+                        f"bv*[height<={h}]+ba/b[height<={h}]/bv*+ba/best"
                     )
                 opts["merge_output_format"] = "mp4"
 
