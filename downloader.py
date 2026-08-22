@@ -148,11 +148,35 @@ class Downloader:
 
     # -- مسیر یوتیوب -----------------------------------------------------
 
+    def _probe_duration(self, url: str, out_dir: str) -> int:
+        """
+        فقط مدت‌زمان ویدیو رو (بدون دانلود واقعی) می‌گیره. این یه استخراج جدا و
+        سبکه تا با فرآیند دانلود اصلی تداخل نکنه (فراخوانی process_ie_result
+        بیشتر از یک‌بار روی همون info می‌تونه باعث خطای انتخاب فرمت بشه).
+        """
+        opts = self._base_opts(out_dir)
+        opts["noplaylist"] = True
+        opts["skip_download"] = True
+        opts["extractor_args"] = {"youtube": {"player_client": ["android"]}}
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info.get("duration") or 0
+        except Exception as e:
+            logger.warning(f"گرفتن مدت‌زمان ویدیو ناموفق بود (نادیده گرفته می‌شه): {e}")
+            return 0
+
     def _download_youtube(self, url: str, out_dir: str, mode: str = "video", quality: str = "best") -> dict:
         """
         mode: "video" یا "audio"
         quality: "best" یا یکی از کلیدهای QUALITY_HEIGHTS ("1080","720","480","360") - فقط برای mode=video
         """
+        duration = self._probe_duration(url, out_dir)
+        if duration and duration > Config.MAX_DURATION_SECONDS:
+            raise FileTooLargeError(
+                f"مدت‌زمان ویدیو ({duration // 60} دقیقه) بیشتر از حد مجازه."
+            )
+
         last_error: Exception | None = None
 
         for client in YOUTUBE_CLIENT_CHAIN:
@@ -179,15 +203,10 @@ class Downloader:
 
             try:
                 with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-
-                    duration = info.get("duration") or 0
-                    if duration and duration > Config.MAX_DURATION_SECONDS:
-                        raise FileTooLargeError(
-                            f"مدت‌زمان ویدیو ({duration // 60} دقیقه) بیشتر از حد مجازه."
-                        )
-
-                    ydl.process_ie_result(info, download=True)
+                    # یک تک‌فراخوانی extract_info با download=True: هم استخراج و هم
+                    # دانلود واقعی رو انجام می‌ده. فراخوانی جدای process_ie_result
+                    # بعد از این باعث خطای کاذب "Requested format is not available" می‌شد.
+                    info = ydl.extract_info(url, download=True)
                     filepath = ydl.prepare_filename(info)
                     expected_ext = f".{AUDIO_CODEC}" if mode == "audio" else ".mp4"
 

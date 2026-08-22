@@ -9,6 +9,8 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import yt_dlp
+
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -505,6 +507,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(handle_membership_check, pattern=r"^chk\|"))
     app.add_error_handler(on_error)
 
+    logger.info(f"yt-dlp version: {yt_dlp.version.__version__}")
     logger.info(
         f"Bot starting... max_concurrent={Config.MAX_CONCURRENT_DOWNLOADS} "
         f"cooldown={Config.USER_COOLDOWN_SECONDS}s cookies={'yes' if (Config.COOKIES_B64 or Config.COOKIES_FILE) else 'no'} "

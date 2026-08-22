@@ -1,2 +1,14 @@
 [phases.setup]
 aptPkgs = ["ffmpeg"]
+
+# نصب استاندارد وابستگی‌ها
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+# این فاز همیشه (حتی اگه کش install تغییری نکرده باشه) yt-dlp رو به آخرین
+# نسخه آپدیت می‌کنه؛ چون یوتیوب مرتب الگوریتم فرمت‌هاش رو عوض می‌کنه و نسخه‌ی
+# قدیمی می‌تونه باعث خطای "Requested format is not available" برای همه‌ی
+# فرمت‌ها بشه.
+[phases.upgrade_ytdlp]
+cmds = ["pip install --upgrade --no-cache-dir yt-dlp"]
+dependsOn = ["install"]
