@@ -57,7 +57,8 @@ def download_media(url: str, out_dir: str) -> dict:
 
     ydl_opts = {
         "outtmpl": out_template,
-        "format": "best[ext=mp4]/best",
+        "format": "bv*[ext=mp4]+ba[ext=m4a]/bv*+ba/best",
+        "merge_output_format": "mp4",
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
@@ -83,6 +84,22 @@ def download_media(url: str, out_dir: str) -> dict:
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
         filepath = ydl.prepare_filename(info)
+
+        # بعد از merge شدن ویدیو و صدا، پسوند فایل ممکنه فرق کنه (مثلاً به mp4 تبدیل بشه)
+        if not os.path.exists(filepath):
+            base, _ = os.path.splitext(filepath)
+            candidate = base + ".mp4"
+            if os.path.exists(candidate):
+                filepath = candidate
+            else:
+                # آخرین راه‌حل: جدیدترین فایل توی پوشه‌ی موقت رو پیدا کن
+                files = [
+                    os.path.join(out_dir, f) for f in os.listdir(out_dir)
+                    if os.path.isfile(os.path.join(out_dir, f))
+                ]
+                if files:
+                    filepath = max(files, key=os.path.getmtime)
+
         return {"path": filepath, "title": info.get("title", "video")}
 
 
