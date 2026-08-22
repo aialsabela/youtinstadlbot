@@ -1,11 +1,2 @@
 [phases.setup]
 aptPkgs = ["ffmpeg"]
-
-# آپدیت اجباری yt-dlp رو مستقیم توی همون فاز install انجام می‌دیم (نه یه فاز
-# جدا)، چون فازهای سفارشی که هیچ فاز دیگه‌ای به‌عنوان dependsOn بهشون اشاره
-# نکنه توسط Nixpacks نادیده گرفته می‌شن و اصلاً اجرا نمی‌شن.
-[phases.install]
-cmds = [
-  "pip install -r requirements.txt",
-  "pip install --upgrade --no-cache-dir yt-dlp"
-]
