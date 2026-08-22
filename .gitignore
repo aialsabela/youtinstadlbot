@@ -4,3 +4,5 @@ __pycache__/
 venv/
 *.mp4
 *.mp3
+cookies.txt
+channel_state.json
