@@ -48,7 +48,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 URL_REGEX = re.compile(
-    r"(https?://)?(www\.)?(youtube\.com|youtu\.be|instagram\.com)/\S+",
+    r"(https?://)?(www\.|vm\.|vt\.)?"
+    r"(youtube\.com|youtu\.be|instagram\.com|tiktok\.com|twitter\.com|x\.com)/\S+",
     re.IGNORECASE,
 )
 
@@ -139,7 +140,7 @@ def join_required_text(channel: str) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "سلام! 👋\n\n"
-        "لینک ویدیوی یوتیوب یا اینستاگرام رو برام بفرست تا دانلودش کنم.\n"
+        "لینک ویدیوی یوتیوب، اینستاگرام، تیک‌تاک یا توییتر/ایکس رو برام بفرست تا دانلودش کنم.\n"
         "برای لینک‌های یوتیوب می‌تونی کیفیت ویدیو یا حالت فقط-صدا (MP3) رو هم انتخاب کنی.\n\n"
         f"⚠️ حداکثر حجم مجاز: {Config.MAX_FILE_SIZE_MB}MB\n"
         f"⏳ فاصله‌ی لازم بین دو درخواست: {Config.USER_COOLDOWN_SECONDS} ثانیه"
@@ -167,7 +168,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     url = extract_url(text)
 
     if not url:
-        await update.message.reply_text("لطفاً یک لینک معتبر از یوتیوب یا اینستاگرام بفرست.")
+        await update.message.reply_text(
+            "لطفاً یک لینک معتبر از یوتیوب، اینستاگرام، تیک‌تاک یا توییتر/ایکس بفرست."
+        )
         return
 
     token = store_pending_url(url)
@@ -188,7 +191,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # اینستاگرام: کیفیت انتخابی نداره، مستقیم دانلود می‌شه
+    # سایر پلتفرم‌ها (اینستاگرام/تیک‌تاک/توییتر): کیفیت انتخابی ندارن، مستقیم دانلود می‌شن
     remaining = check_cooldown(user_id)
     if remaining > 0:
         await update.message.reply_text(f"⏳ لطفاً {remaining:.0f} ثانیه صبر کن و دوباره امتحان کن.")
@@ -274,7 +277,7 @@ async def handle_membership_check(update: Update, context: ContextTypes.DEFAULT_
         )
         return
 
-    # اینستاگرام: مستقیم دانلود می‌شه
+    # سایر پلتفرم‌ها: مستقیم دانلود می‌شن
     remaining = check_cooldown(user_id)
     status_msg = query.message
     if remaining > 0:
@@ -430,7 +433,7 @@ async def _process_download(
         await status_msg.edit_text(
             "❌ پلتفرم درخواست‌ها رو محدود کرده یا نیاز به ورود داره "
             "(معمولاً برای IP سرورهای ابری پیش میاد یا رسانه خصوصیه).\n\n"
-            "این مشکل با تنظیم کوکی حساب گوگل/اینستاگرام روی سرور حل می‌شه. "
+            "این مشکل با تنظیم کوکی حساب گوگل/اینستاگرام/تیک‌تاک/توییتر روی سرور حل می‌شه. "
             "توضیحات کامل توی README پروژه، بخش «حل خطای Sign in to confirm» هست."
         )
 

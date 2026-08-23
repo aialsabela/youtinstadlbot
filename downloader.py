@@ -73,6 +73,14 @@ def is_instagram(url: str) -> bool:
     return "instagram.com" in url or "instagr.am" in url
 
 
+def is_tiktok(url: str) -> bool:
+    return "tiktok.com" in url
+
+
+def is_twitter(url: str) -> bool:
+    return "twitter.com" in url or "x.com" in url
+
+
 def _resolve_cookies_path() -> str | None:
     """
     مسیر فایل کوکی رو برمی‌گردونه. اگه COOKIES_B64 ست شده باشه (روش امن پیشنهادی)،
@@ -285,17 +293,19 @@ class Downloader:
         detail = " | ".join(attempt_summaries) if attempt_summaries else final_msg
         raise DownloaderError(detail)
 
-    # -- مسیر اینستاگرام ---------------------------------------------
+    # -- مسیر پلتفرم‌های عمومی (اینستاگرام / تیک‌تاک / توییتر-ایکس) -----------
 
-    def _download_instagram(self, url: str, out_dir: str) -> dict:
+    def _download_generic(self, url: str, out_dir: str) -> dict:
         """
-        پست تکی (عکس/ویدیو/ریل) و پست چرخشی (carousel با چند عکس/ویدیو) رو
-        پشتیبانی می‌کنه. برای هر دو حالت عمومی و خصوصی (با کوکی) کار می‌کنه.
+        پست تکی (عکس/ویدیو/ریل) و پست چرخشی (چند عکس/ویدیو در یک پست، مثلاً
+        carousel اینستاگرام یا توییت چندعکسی) رو پشتیبانی می‌کنه. برای اینستاگرام،
+        تیک‌تاک و توییتر/ایکس مشترکه چون منطق yt-dlp براشون یکسانه. برای هر دو
+        حالت عمومی و خصوصی (با کوکی) کار می‌کنه.
         """
         opts = self._base_opts(out_dir)
         opts["format"] = f"{VIDEO_FORMAT_SELECTOR}/best"
         opts["merge_output_format"] = "mp4"
-        # False می‌ذاریم چون پست چرخشی اینستاگرام توی yt-dlp به‌صورت چند "entry" مدل می‌شه
+        # False می‌ذاریم چون پست چرخشی توی yt-dlp به‌صورت چند "entry" مدل می‌شه
         opts["noplaylist"] = False
         opts["playlist_items"] = f"1-{MAX_CAROUSEL_ITEMS}"
 
@@ -306,11 +316,13 @@ class Downloader:
             msg = str(e)
 
             if any(k in msg for k in ["Login required", "Requested content is not available",
-                                       "rate-limit", "wait a few minutes", "checkpoint_required"]):
+                                       "rate-limit", "wait a few minutes", "checkpoint_required",
+                                       "NSFW tweet", "age-restricted"]):
                 raise BotCheckError(msg) from e
 
             if any(k in msg for k in ["Private", "does not exist", "not found",
-                                       "unable to fetch", "no longer available"]):
+                                       "unable to fetch", "no longer available",
+                                       "has been deleted", "suspended"]):
                 raise UnavailableError(msg) from e
 
             raise DownloaderError(msg) from e
@@ -338,8 +350,8 @@ class Downloader:
         if not items:
             raise UnavailableError("دانلود رسانه‌های این پست ناموفق بود.")
 
-        title = info.get("title") or info.get("description") or "Instagram post"
-        return {"title": title.strip()[:200] if title else "Instagram post", "items": items}
+        title = info.get("title") or info.get("description") or "post"
+        return {"title": title.strip()[:200] if title else "post", "items": items}
 
     # -- نقطه‌ی ورود عمومی ---------------------------------------------
 
@@ -347,12 +359,12 @@ class Downloader:
         """
         لینک رو دانلود می‌کنه و برمی‌گردونه:
         {"title": str, "items": [{"path": str, "type": "video"|"photo"|"audio"}, ...]}
-        برای یوتیوب همیشه یک آیتم؛ برای اینستاگرام ممکنه چند آیتم باشه (پست چرخشی).
-        mode/quality فقط برای یوتیوب معنا دارن (اینستاگرام همیشه بهترین کیفیت موجود).
+        برای یوتیوب همیشه یک آیتم؛ برای بقیه‌ی پلتفرم‌ها ممکنه چند آیتم باشه (پست چرخشی).
+        mode/quality فقط برای یوتیوب معنا دارن.
         """
         if is_youtube(url):
             return self._download_youtube(url, out_dir, mode=mode, quality=quality)
-        elif is_instagram(url):
-            return self._download_instagram(url, out_dir)
+        elif is_instagram(url) or is_tiktok(url) or is_twitter(url):
+            return self._download_generic(url, out_dir)
         else:
-            raise DownloaderError("این لینک پشتیبانی نمی‌شه. فقط یوتیوب و اینستاگرام.")
+            raise DownloaderError("این لینک پشتیبانی نمی‌شه. یوتیوب، اینستاگرام، تیک‌تاک و توییتر/ایکس.")
